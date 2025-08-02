@@ -1,50 +1,13 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const dataFilePath = path.join(process.cwd(), 'data', 'moods.json');
-
-// Ensure data directory exists
-const ensureDataDir = () => {
-  const dataDir = path.dirname(dataFilePath);
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-};
-
-// Read mood data from file
-const readMoodData = () => {
-  try {
-    ensureDataDir();
-    if (fs.existsSync(dataFilePath)) {
-      const data = fs.readFileSync(dataFilePath, 'utf8');
-      return JSON.parse(data);
-    }
-    return [];
-  } catch (error) {
-    console.error('Error reading mood data:', error);
-    return [];
-  }
-};
-
-// Write mood data to file
-const writeMoodData = (data) => {
-  try {
-    ensureDataDir();
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2));
-    return true;
-  } catch (error) {
-    console.error('Error writing mood data:', error);
-    return false;
-  }
-};
+import { kv } from '@vercel/kv';
 
 // GET /api/moods - Retrieve all mood entries
 export async function GET() {
   try {
-    const moods = readMoodData();
+    const moods = await kv.get('moods') || [];
     return NextResponse.json(moods);
   } catch (error) {
+    console.error('Error fetching moods:', error);
     return NextResponse.json(
       { error: 'Failed to fetch mood entries' },
       { status: 500 }
@@ -56,7 +19,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    
+
     // Validate required fields
     if (!body.type || body.moodLevel === undefined || !body.date || !body.time) {
       return NextResponse.json(
@@ -76,18 +39,14 @@ export async function POST(request) {
       timestamp: new Date().toISOString()
     };
 
-    const moods = readMoodData();
+    const moods = await kv.get('moods') || [];
     moods.unshift(newMood); // Add to beginning of array
-    
-    if (writeMoodData(moods)) {
-      return NextResponse.json(newMood, { status: 201 });
-    } else {
-      return NextResponse.json(
-        { error: 'Failed to save mood entry' },
-        { status: 500 }
-      );
-    }
+
+    await kv.set('moods', moods);
+
+    return NextResponse.json(newMood, { status: 201 });
   } catch (error) {
+    console.error('Error creating mood entry:', error);
     return NextResponse.json(
       { error: 'Failed to create mood entry' },
       { status: 500 }
