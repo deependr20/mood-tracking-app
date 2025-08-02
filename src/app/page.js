@@ -7,12 +7,12 @@ import { format, startOfWeek, addDays } from 'date-fns';
 
 // Mood data structure
 const moodLevels = [
-  { level: 5, emoji: '😊', label: 'Happy' },
-  { level: 4, emoji: '🙂', label: 'Content' },
-  { level: 3, emoji: '😐', label: 'Neutral' },
-  { level: 2, emoji: '😥', label: 'Stressed' },
-  { level: 1, emoji: '😔', label: 'Sad' },
-  { level: 0, emoji: '😡', label: 'Angry' }
+  { level: 5, label: 'Happy' },
+  { level: 4, label: 'Content' },
+  { level: 3, label: 'Neutral' },
+  { level: 2, label: 'Stressed' },
+  { level: 1, label: 'Sad' },
+  { level: 0, label: 'Angry' }
 ];
 
 const moodTypes = [
@@ -288,6 +288,34 @@ export default function MoodTracker() {
     });
   };
 
+  // 2. Add generateMonthData function
+  const generateMonthData = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+    return days.map((day) => {
+      const date = new Date(year, month, day);
+      const dayStr = date.toISOString().slice(0, 10);
+      const dayEntries = moodEntries.filter(entry =>
+        entry.date && entry.date.slice(0, 10) === dayStr
+      );
+      const data = {
+        day: day.toString(),
+        date: date,
+        daily: null,
+        meditation: null,
+        workout: null
+      };
+      dayEntries.forEach(entry => {
+        data[entry.type] = entry.moodLevel;
+      });
+      return data;
+    });
+  };
+
   const handleMoodSelection = async (moodLevel) => {
     const newEntry = {
       type: selectedMoodType,
@@ -357,21 +385,29 @@ export default function MoodTracker() {
     }
   };
 
+  // 3. Use weekData or monthData based on selectedPeriod
   const weekData = generateWeekData();
+  const monthData = generateMonthData();
+  const chartData = selectedPeriod === 'week' ? weekData : monthData;
 
-  // Custom dot to show emoji on each point
-  const renderCustomDot = (typeId) => (props) => {
-    const { cx, cy, value } = props;
-    if (value == null) return null;
-    const mood = moodLevels.find(m => m.level === value);
-    return (
-      <g>
-        <circle cx={cx} cy={cy} r={14} fill="white" stroke="#ddd" strokeWidth={2} />
-        <text x={cx} y={cy + 6} textAnchor="middle" fontSize="18">
-          {mood?.emoji}
-        </text>
-      </g>
-    );
+  // 4. Filter mood entries table by selected period
+  const getFilteredEntries = () => {
+    if (selectedPeriod === 'week') {
+      const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+      const weekEnd = addDays(weekStart, 6);
+      return moodEntries.filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate >= weekStart && entryDate <= weekEnd;
+      });
+    } else {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      return moodEntries.filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate.getFullYear() === year && entryDate.getMonth() === month;
+      });
+    }
   };
 
   return (
@@ -455,22 +491,12 @@ export default function MoodTracker() {
         <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">Mood Trends</h2>
 
-          {/* Y-axis labels and Chart */}
-          <div className="flex mb-4">
-            {/* Y-axis labels on the left */}
-            <div className="w-20 flex-shrink-0 mr-4">
-              {moodLevels.map((mood) => (
-                <div key={mood.level} className="flex items-center h-8 text-sm text-gray-600">
-                  <span className="mr-2">{mood.emoji}</span>
-                  <span>{mood.label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Chart on the right */}
-            <div className="flex-1 h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weekData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+          {/* Y-axis labels on the left: emoji (large) + label (right) */}
+          <div className="mb-4 relative" style={{ height: 216 }}>
+            {/* Chart container */}
+            <div style={{ height: '216px', marginLeft: '60px', marginRight: '100px' }}>
+              <ResponsiveContainer width="100%" height={216}>
+                <LineChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis
                     dataKey="day"
@@ -484,8 +510,9 @@ export default function MoodTracker() {
                     ticks={[0, 1, 2, 3, 4, 5]}
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 12, fill: '#6B7280' }}
-                    hide={true}
+                    tick={{ fontSize: 17, fill: '#6B7280', fontWeight: 500 }}
+                    tickFormatter={() => ''}
+                    width={0}
                   />
                   <Tooltip
                     content={({ active, payload, label }) => {
@@ -494,7 +521,14 @@ export default function MoodTracker() {
                           <div className="bg-white p-3 border rounded-lg shadow-lg">
                             <p className="font-medium text-gray-900">{label}</p>
                             {payload.map((entry, index) => {
-                              const mood = moodLevels.find(m => m.level === entry.value);
+                              const mood = [
+                                { level: 5, emoji: '😊', label: 'Happy' },
+                                { level: 4, emoji: '🙂', label: 'Content' },
+                                { level: 3, emoji: '😐', label: 'Neutral' },
+                                { level: 2, emoji: '😥', label: 'Stressed' },
+                                { level: 1, emoji: '😔', label: 'Sad' },
+                                { level: 0, emoji: '😡', label: 'Angry' }
+                              ].find(m => m.level === entry.value);
                               return (
                                 <p key={index} className="text-sm font-medium flex items-center" style={{ color: entry.color }}>
                                   <span style={{ fontSize: 18, marginRight: 6 }}>{mood?.emoji}</span>
@@ -515,12 +549,60 @@ export default function MoodTracker() {
                       dataKey={type.id}
                       stroke={type.color}
                       strokeWidth={3}
-                      dot={renderCustomDot(type.id)}
-                      activeDot={{ r: 18, stroke: type.color, strokeWidth: 3 }}
+                      dot={true}
+                      activeDot={{ r: 8, stroke: type.color, strokeWidth: 3 }}
                     />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+
+            {/* Emoji column - absolutely positioned */}
+            <div className="absolute left-0 top-0 w-16 h-full">
+              {[5, 4, 3, 2, 1, 0].map((level, idx) => {
+                const mood = [
+                  { level: 5, emoji: '😊', label: 'Happy' },
+                  { level: 4, emoji: '🙂', label: 'Content' },
+                  { level: 3, emoji: '😐', label: 'Neutral' },
+                  { level: 2, emoji: '😥', label: 'Stressed' },
+                  { level: 1, emoji: '😔', label: 'Sad' },
+                  { level: 0, emoji: '😡', label: 'Angry' }
+                ].find(m => m.level === level);
+                const topPosition = (idx * 216) / 6; // Distribute evenly across chart height
+                return (
+                  <div
+                    key={level}
+                    className="absolute flex items-center justify-center w-full"
+                    style={{ top: topPosition, height: '36px' }}
+                  >
+                    <span style={{ fontSize: 28 }}>{mood.emoji}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Label column - absolutely positioned */}
+            <div className="absolute right-0 top-0 w-20 h-full">
+              {[5, 4, 3, 2, 1, 0].map((level, idx) => {
+                const mood = [
+                  { level: 5, emoji: '😊', label: 'Happy' },
+                  { level: 4, emoji: '🙂', label: 'Content' },
+                  { level: 3, emoji: '😐', label: 'Neutral' },
+                  { level: 2, emoji: '😥', label: 'Stressed' },
+                  { level: 1, emoji: '😔', label: 'Sad' },
+                  { level: 0, emoji: '😡', label: 'Angry' }
+                ].find(m => m.level === level);
+                const topPosition = (idx * 216) / 6; // Distribute evenly across chart height
+                return (
+                  <div
+                    key={level}
+                    className="absolute flex items-center w-full"
+                    style={{ top: topPosition, height: '36px' }}
+                  >
+                    <span className="ml-2 text-base font-medium text-gray-700">{mood.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -564,17 +646,15 @@ export default function MoodTracker() {
         {/* Mood Entries */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <h2 className="text-lg font-semibold mb-4">Mood Entries</h2>
-          {moodEntries.length === 0 ? (
+          {getFilteredEntries().length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-4">😊</div>
               <p>No mood entries yet. Start tracking your mood!</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {moodEntries.slice(0, 10).map((entry) => (
+              {getFilteredEntries().slice(0, 10).map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center space-x-3">
-                    <span className="text-2xl">{entry.moodEmoji}</span>
                     <div>
                       <div className="font-medium">
                         {getMoodTypeLabel(entry.type)}: {entry.moodLabel}
