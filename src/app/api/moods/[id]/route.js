@@ -1,22 +1,31 @@
 import { NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+import { createClient } from 'redis';
+
+// Create Redis client
+const redis = createClient({
+  url: process.env.REDIS_URL
+});
+
+// Connect to Redis
+redis.connect().catch(console.error);
 
 // DELETE /api/moods/[id] - Delete a specific mood entry
 export async function DELETE(request, { params }) {
   try {
     const moodId = parseInt(params.id);
 
-    const moods = await kv.get('moods') || [];
-    const updatedMoods = moods.filter(mood => mood.id !== moodId);
+    const moods = await redis.get('moods');
+    const moodArray = moods ? JSON.parse(moods) : [];
+    const updatedMoods = moodArray.filter(mood => mood.id !== moodId);
 
-    if (moods.length === updatedMoods.length) {
+    if (moodArray.length === updatedMoods.length) {
       return NextResponse.json(
         { error: 'Mood entry not found' },
         { status: 404 }
       );
     }
 
-    await kv.set('moods', updatedMoods);
+    await redis.set('moods', JSON.stringify(updatedMoods));
 
     return NextResponse.json(
       { message: 'Mood entry deleted successfully' },
